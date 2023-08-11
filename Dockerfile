@@ -1,32 +1,18 @@
-FROM composer:2 AS composer
+FROM php:8.2-fpm-alpine
 
-RUN composer create-project --prefer-dist laravel/laravel /app
+RUN apk add --no-cache nginx wget
 
-FROM php:8.1-apache
+RUN mkdir -p /run/nginx
 
-COPY --from=composer /app /var/www/html/
-COPY --from=composer /usr/bin/composer /usr/bin/composer
+COPY docker/nginx.conf /etc/nginx/nginx.conf
 
-RUN apt-get update && \
-    apt-get install -y \
-    zip \
-    unzip \
-    git \
-    libpq-dev \
-    && docker-php-ext-install \
-    pdo_mysql \
-    && docker-php-ext-enable \
-    pdo_mysql
+RUN mkdir -p /app
+COPY . /app
 
-RUN chown -R www-data:www-data /var/www/html/storage \
-    && chown -R www-data:www-data /var/www/html/bootstrap/cache
+RUN sh -c "wget http://getcomposer.org/composer.phar && chmod a+x composer.phar && mv composer.phar /usr/local/bin/composer"
+RUN cd /app && \
+    /usr/local/bin/composer install --no-dev
 
-RUN a2enmod rewrite && \
-    sed -i 's!/var/www/html!/var/www/html/public!g' /etc/apache2/sites-available/000-default.conf
+RUN chown -R www-data: /app
 
-RUN composer dump-autoload --optimize \
-    && php artisan optimize
-
-EXPOSE 80
-
-CMD ["apache2-foreground"]
+CMD sh /app/docker/startup.sh
